@@ -5,6 +5,7 @@
 Analysis explorling the spatiotemporal fourier spectrum of 'a day in the life of the retina'.
 
 Vasha DuTell, Agostino Gibaldi, Giulia Focarelli, Marty Banks, Bruno Olshausen
+
 UC Berkeley
 
 What is the spatiotemporal power spectrum of the visual signal for a modern human as they go about normal daily tasks? How does this change as tasks differ, and how do different types of motion such as environmental, body, head, and eye motion contribute to the signal that lands on the retina?
