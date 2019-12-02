@@ -550,3 +550,47 @@ def convert_ximea_time_to_unix_time(timestamp_file, sync_file):
     t_cam_converted = np.append(ts_table, np.expand_dims(t_cam_converted,1),axis=1)
     
     return(t_cam_converted)
+
+def convert_bin_pngs(filename, first_fnum, save_batchsize, save_folder,  dims=(1544,2064)):
+    '''
+    Take a file saved in .bin format from a ximea camera, and convert it to png images.
+    Parameters:
+        filename (str): file to be converted
+        save_folder (str): folder to save png files
+        im_shape (2pule ints): shape of image
+        img_format (str): Image format files are saved
+    Returns:
+        None
+    '''
+    nbytes = np.prod(dims)
+    
+    with open(filename, 'rb') as fn:
+        bs = fn.read(1)
+        for i in range(first_fnum, first_fnum+save_batchsize):
+            save_filepath = os.path.join(save_folder, f'frame_{i}.png')
+            binary_img = []
+            for b in range(nbytes):
+                binary_img.append(int.from_bytes(fn.read(1),'big'))
+            binary_img = np.array(binary_img)
+            cimage = cv2.cvtColor(np.uint8(binary_img.reshape(dims)),cv2.COLOR_BayerGR2RGB)
+            cv2.imwrite(save_filepath, cimage)
+
+
+
+def convert_trial_directory(camera_dir, camera, save_batchsize, analysis_folder):
+    frame_start = 0
+    bin_file = os.path.join(camera_dir,camera,f'frames_{frame_start}_{frame_start+save_batchsize-1}.bin')
+    cam_folder = os.path.join(analysis_folder,'pngs',camera)
+    try:
+        os.makedirs(cam_folder)
+    except:
+        print('already made cam folder!')
+
+    print(f'Converting bin to png for folder {os.path.join(camera_dir,camera)}')
+    print(f'Each * is {save_batchsize} frames...')
+    while(os.path.isfile(bin_file)):
+        print('*')
+        convert_bin_pngs(bin_file, frame_start, save_batchsize, cam_folder, dims=(1544,2064))
+        frame_start += save_batchsize
+        bin_file = os.path.join(camera_dir,camera,f'frames_{frame_start}_{frame_start+save_batchsize-1}.bin')
+    print('Done!')
