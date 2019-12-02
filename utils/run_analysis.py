@@ -5,55 +5,41 @@ from multiprocessing import Process
 import re
 import matplotlib.pyplot as plt
 
-def convert_bin_png(filename, save_folder_list, im_shape=(1544,2064), img_format='XI_RAW8'):
-    '''
-    Take a file saved in .bin format from a ximea camera, and convert it to a png image.
-    Parameters:
-        filename (str): file to be converted
-        save_folder (str): folder to save png files
-        im_shape (2pule ints): shape of image
-        img_format (str): Image format files are saved
-    Returns:
-        None
-    '''
+# def convert_bin_pngs(filename, first_fnum save_folder, save_batchsize, dims=(1544,2064), img_format='XI_RAW8'):
+#     '''
+#     Take a file saved in .bin format from a ximea camera, and convert it to png images.
+#     Parameters:
+#         filename (str): file to be converted
+#         save_folder (str): folder to save png files
+#         im_shape (2pule ints): shape of image
+#         img_format (str): Image format files are saved
+#     Returns:
+#         None
+#     '''
     
-    fname, _ = os.path.splitext(os.path.basename(filename))
-    save_filepath = os.path.join(save_folder, fname + '.png')
-    binary_img = []
-    
-    if(img_format=='XI_RAW16'):
-        with open(filename, 'rb') as f:
-            bs = f.read(2)
-            while(bs):
-                #for raw_16 img is large and small bytes alternating
-                bs = f.read(1)
-                bs_b = f.read(1)
-                byte = int.from_bytes(bs,'big')
-                byte_big = int.from_bytes(bs_b,'big')
-                #print(256*byte_big+byte)
-                binary_img.append((256*byte_big+byte))
-            f.close()
-    
-        im = np.array(binary_img).reshape(im_shape)
-        im = cv2.cvtColor(np.uint16(im), cv2.COLOR_BayerGR2RGB)
-        im = im.astype(np.uint16)
+
+#     for i in range(first_fnum, first_fnum+save_batchsize):
+#         save_filepath = os.path.join(save_folder, 'frame_{first_fnum + '.png')
+#     nbytes = np.prod(dims)
         
-    elif(img_format=='XI_RAW8'):
-        with open(filename, 'rb') as f:
-            bs = f.read(1)
-            while(bs):
-                bs = f.read(1)
-                bs = int.from_bytes(bs,'big')
-                binary_img.append(bs)
-            f.close()
-        im = np.array(binary_img).reshape(im_shape)
-        im = cv2.cvtColor(np.uint8(im), cv2.COLOR_BayerGR2RGB)
-        im = im.astype(np.uint8)
+#     elif(img_format=='XI_RAW8'):
+#         with open(filename, 'rb') as f:
+#             bs = f.read(1)
+#             while(bs):
+#                 binary_img = []
+#                 bs = f.read(1)
+#                 bs = int.from_bytes(bs,'big')
+#                 binary_img.append(bs)
+#             f.close()
+#         im = np.array(binary_img).reshape(im_shape)
+#         #note this uses bilinear interpolation
+#         im = cv2.cvtColor(np.uint8(im), cv2.COLOR_BayerGR2RGB)
+#         im = im.astype(np.uint8)
         
-    cv2.imwrite(save_filepath, im)
-    print('*',end='')
+#     cv2.imwrite(save_filepath, im)
+#     print('*',end='')
     
-    return()
+#     return()
 
 
 def bin_to_im(binfile, nframe, dims=(1544,2064)):
@@ -389,6 +375,78 @@ def ximea_get_frame(frame_number, save_batchsize, cam_name, cam_save_folder, img
         frame[frame > 1] = 1
         
     return(frame)
+
+# def bin_to_im(binfile, nframe, dims=(1544,2064)):
+#     '''
+#     convert a single image from 8-bit raw bytes to png image.
+#     Input:
+#         binfile (str): path to binary file
+#         dims (2ple int): What are the dimensions of the iamge?
+#         nframe (int): Which frame number do we want within image?
+#         '''
+#     a = []
+#     # for uint8
+#     nbytes = np.prod(dims)
+#     startbyte = nframe*nbytes
+#     with open(binfile, 'rb') as fn:
+#         fn.seek(startbyte)
+#         bs = fn.read(1)
+#         for i in range(nbytes):
+#             bs = fn.read(1)
+#             bs = int.from_bytes(bs,'big')
+#             a.append(bs)
+            
+#     a = np.array(a)
+#     im = a.reshape(dims)
+#     imc = cv2.cvtColor(np.uint8(im), cv2.COLOR_BayerGR2RGB)
+    
+#     return(imc)
+
+# def ximea_get_frame_sequence(frame_numbers, save_batchsize, cam_name, cam_save_folder, img_dims=(1544,2064), normalize=True):
+#     '''
+#     Get the filename and offset of a given sequence of frame numbers from the camera.
+#     Params:
+#         frame_numbers (arrray of ints): frame numbers to grab
+#         save_bathsize (int): what was the batchsize during collection?
+#         cam_name (str): what is the name of the caera? OD/OS/CY
+#         cam_save_folder (str): what is the name of the folder?
+#         img_dims (int, int): dimensions of frame reading in.
+#     Returns:
+#         frame (2d numpy array): 2d array of frame from saved file
+#     '''
+    
+#     file_start = int(np.floor(frame_number/save_batchsize)*save_batchsize)
+#     file_end = file_start + save_batchsize - 1
+#     frame_offset = frame_number%file_start if file_start>0 else frame_number
+#     file_name_start = f'frames_{file_start}_{file_end}.bin'
+#     file_path = os.path.join(cam_save_folder, cam_name, file_name)
+    
+#     frame_sequence = np.zeros((len(frame_numbers), *img_dims, 3))
+    
+#     for i in range(len(frame_numbers)):
+#         fnum = frame_numbers[i]
+        
+        
+#         frame = []
+#         nbytes = np.prod(dims)
+#         startbyte = nframe*nbytes
+#         with open(binfile, 'rb') as fn:
+#             for i in range(nbytes:
+#                 bs = fn.read(1)
+#                 frame[i] = int.from_bytes(bs,'big')
+        
+    
+    
+    
+#     frame = bin_to_im(file_path, frame_offset, img_dims)
+    
+#     if normalize:
+#         frame = frame/75
+#         frame[frame > 1] = 1
+        
+#     return(frame)
+
+
 
 def pupil_framenum_to_timestamp(timestamp_file, framenum):
     '''
