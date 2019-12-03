@@ -56,8 +56,8 @@ def read_match_timestamps(base_dir, target_fps, subject, trial, num_cameras=1):
     #get pupil timestamps
     pupil_positions = dt.fread(pupil_timestamp_file)
     pupil_positions = pupil_positions[:,[0,1,2,4,5]]
-    pupil_eye_0 = np.array(pupil_positions)[np.where(np.array(pupil_positions)[:,2]==1)[0],:]
-    pupil_eye_1 = np.array(pupil_positions)[np.where(np.array(pupil_positions)[:,2]==0)[0],:]
+    pupil_eye_0 = np.array(pupil_positions)[np.where(np.array(pupil_positions)[:,2]==0)[0],:]
+    pupil_eye_1 = np.array(pupil_positions)[np.where(np.array(pupil_positions)[:,2]==1)[0],:]
     pupil_ts_eye0 = pupil_eye_0[:,0]
     pupil_ts_eye1 = pupil_eye_1[:,0]
     pupil_annotations = np.load(pupil_annotations_file)
