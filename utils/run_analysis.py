@@ -537,14 +537,14 @@ def convert_ximea_time_to_unix_time(timestamp_file, sync_file):
     # We assume here that time.time() in Linux's 0.001s precision is better than camera's.
     # Convert Camera timestamps to Unix timestamps.
     #first convert to [0,1]
-    #t_cam_converted = (ts_table[:,2] - cam_pre) / (cam_post - cam_pre)
+    t_cam_converted = (ts_table[:,2] - cam_pre) / (cam_post - cam_pre)
     #then convert to wall time
-    #t_cam_converted = (t_cam_converted * (unix_post - unix_pre)) + unix_pre
+    t_cam_converted = (t_cam_converted * (unix_post - unix_pre)) + unix_pre
     
     #assume time in camera is linear, and just change offset at pre.
-    t_cam_converted = ts_table[:,2] - ts_table[0,2] + unix_pre
+    #t_cam_converted = ts_table[:,2] - ts_table[0,2] + unix_pre
     
-    print(t_cam_converted[0])
+    print(f'Start at {t_cam_converted[0]}, end at {t_cam_converted[-1]}')
     
     #add unix time to data
     t_cam_converted = np.append(ts_table, np.expand_dims(t_cam_converted,1),axis=1)
