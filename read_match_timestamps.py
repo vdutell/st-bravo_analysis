@@ -77,7 +77,6 @@ def read_match_timestamps(base_dir, target_fps, subject, trial, num_cameras=1):
         end_task_time = timestamps_ximea[-1]
     print(f'Task Lasted: {end_task_time-start_task_time} seconds.')
   
-    
     start_timestamp = np.max((timestamps_ximea[0], pupil_ts_eye0[0], pupil_ts_eye1[0]))
     end_timestamp = np.min((timestamps_ximea[-1], pupil_ts_eye0[-1],pupil_ts_eye1[-1]))
     common_timeline = np.arange(start_timestamp, end_timestamp, 1./target_fps)

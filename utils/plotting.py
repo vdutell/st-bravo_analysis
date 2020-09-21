@@ -69,10 +69,9 @@ def da_plot_power(power_spectrum, fqspace, fqtime, nsamples = 7, minmaxcolors=(N
         minc = np.log10(np.abs(minmaxcolors[0]))
         maxc = np.log10(np.abs(minmaxcolors[1]))
     else:
-        minc = np.min(power_spectrum)
-        maxc = np.max(power_spectrum)
+        minc = np.nanmin(power_spectrum)
+        maxc = np.nanmax(power_spectrum)
 
-    print(minc,maxc)
     clev = np.arange(minc,maxc,0.5)
     hm = axes_hm.contourf(fqtime, fqspace, power_spectrum,
                           clev,

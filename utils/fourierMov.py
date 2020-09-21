@@ -128,73 +128,73 @@ def average_3d_ps(movies, chunkshape, fps, ppd):
     return(psmean, fq1d, fqt)
 
 
-def st_ps(movies, chunkshape, fps, ppd, cardinals=False):
-    '''
-    Calculate the spatiotemporal power spectrum of a movie.
+# def st_ps(movies, chunkshape, fps, ppd, cardinals=False):
+#     '''
+#     Calculate the spatiotemporal power spectrum of a movie.
     
-    Parameters
-    ----------
-    movies:      3d numpy array definig movie for 3d fourier transform analysis.
-    chunkshape:  3ple defining shape (frames,x,y) of movie 'chunks'
-    fps:         frames per secton of movie
-    ppd:        pixels per degree of movie
-    cardinals:  return cardinal averaged PS also
+#     Parameters
+#     ----------
+#     movies:      3d numpy array definig movie for 3d fourier transform analysis.
+#     chunkshape:  3ple defining shape (frames,x,y) of movie 'chunks'
+#     fps:         frames per secton of movie
+#     ppd:        pixels per degree of movie
+#     cardinals:  return cardinal averaged PS also
     
-    Returns:
-    --------
-    ps:       either one power spectrum averaged, or a list with the total averaged, top, bottom, left, right directions avgd
-    fq1d:       spatial frequency spectrum (dimensions of 0 axis of psmean)
-    ft1d:       temporal frequency specturm (dimensions of 1 axis of psmean)
+#     Returns:
+#     --------
+#     ps:       either one power spectrum averaged, or a list with the total averaged, top, bottom, left, right directions avgd
+#     fq1d:       spatial frequency spectrum (dimensions of 0 axis of psmean)
+#     ft1d:       temporal frequency specturm (dimensions of 1 axis of psmean)
     
-    '''
+#     '''
     
-    #If movie is in color, average three color channels to get greyscale
-    #if(movie.ndim > 3):
-    #    movie = np.mean(movie,axis=3)
+#     #If movie is in color, average three color channels to get greyscale
+#     #if(movie.ndim > 3):
+#     #    movie = np.mean(movie,axis=3)
     
-    #in case we want to average over chunks rather than the whole movie
-    movies = cubify(movies, chunkshape)
+#     #in case we want to average over chunks rather than the whole movie
+#     movies = cubify(movies, chunkshape)
     
-    psmovies = []
-    for movie in movies:
-        print('*',end='')
-        #remove mean (DC component)
-        movie = movie - np.mean(movie)       
-        #3d ft for each chunk
-        psmovies.append(np.abs(np.fft.fftn(movie))**2)
+#     psmovies = []
+#     for movie in movies:
+#         print('*',end='')
+#         #remove mean (DC component)
+#         movie = movie - np.mean(movie)       
+#         #3d ft for each chunk
+#         psmovies.append(np.abs(np.fft.fftn(movie))**2)
         
-    del(movies) #save space: we are done with raw movies
-    psmovies=np.array(psmovies)
+#     del(movies) #save space: we are done with raw movies
+#     psmovies=np.array(psmovies)
     
-    #take mean over all ftchunks to get one ftchunk
-    mean_psmovie = np.mean(psmovies,axis=0)
-    #do fft shifts to make football
-    mean_psmovie = np.fft.fftshift(mean_psmovie)
+#     #take mean over all ftchunks to get one ftchunk
+#     mean_psmovie = np.mean(psmovies,axis=0)
+#     #do fft shifts to make football
+#     mean_psmovie = np.fft.fftshift(mean_psmovie)
 
-    #array to hold azmaverage
-    azmovie = []
-    ##spin 360 degrees to get spatial mean (temporal still separate)
-    for f in range(np.shape(mean_psmovie)[0]):
-        azmovie.append(azimuthalAverage(mean_psmovie[f],ppd/2.))
+#     #array to hold azmaverage
+#     azmovie = []
+#     ##spin 360 degrees to get spatial mean (temporal still separate)
+#     for f in range(np.shape(mean_psmovie)[0]):
+#         azmovie.append(azimuthalAverage(mean_psmovie[f],ppd/2.))
 
-    #only take positive side (real)
-    azmovie = np.abs(np.array(azmovie[int(chunkshape[0]/2):])).T
+#     #only take positive side (real)
+#     azmovie = np.abs(np.array(azmovie[int(chunkshape[0]/2):])).T
     
-    del(mean_psmovie)
+#     del(mean_psmovie)
     
-    #get the sampling rate for azmavgd
-    freqspace1d = np.fft.fftfreq(chunkshape[1], d=1./ppd)[0:int(np.floor(chunkshape[1]/2))-1]
-    #get the sampling rates
-    freqspacefull = np.fft.fftshift(np.fft.fftfreq(chunkshape[1], d=1./ppd))
-    # we didn't cicularly average in temporal space, so take only the positive half
-    freqtime = np.fft.fftshift(np.fft.fftfreq(chunkshape[0], d=1./fps))[int(chunkshape[0]/2):]
+#     #get the sampling rate for azmavgd
+#     freqspace1d = np.fft.fftfreq(chunkshape[1], d=1./ppd)[0:int(np.floor(chunkshape[1]/2))-1]
+#     #get the sampling rates
+#     freqspacefull = np.fft.fftshift(np.fft.fftfreq(chunkshape[1], d=1./ppd))
+#     # we didn't cicularly average in temporal space, so take only the positive half
+#     freqtime = np.fft.fftshift(np.fft.fftfreq(chunkshape[0], d=1./fps))[int(chunkshape[0]/2):]
     
-    #remove DC component
-    #azmovie = azmovie[1:,1:]
-    #freqspace1d = freqspace1d[1:]
-    #freqtime = freqtime[1:]    
+#     #remove DC component
+#     #azmovie = azmovie[1:,1:]
+#     #freqspace1d = freqspace1d[1:]
+#     #freqtime = freqtime[1:]    
     
-    return(azmovie, freqspace1d, freqtime)
+#     return(azmovie, freqspace1d, freqtime)
 
 
 # def azm_movie(ps, fps, ppd):

@@ -32,6 +32,9 @@ def run_analysis(base_dir, trial_list_path, line_number, convert_png=False):
     #use precomputed conversion to ximea coordinates for pupil positions where values are individually adjusted for proper alignment
     run_rs2xi=False
     
+    #whether to bin in log space
+    bin_in_log_flag = False
+    
     #parameters that are fixed
     fps_ximea = 200
     fps_pupil = 200
@@ -50,7 +53,7 @@ def run_analysis(base_dir, trial_list_path, line_number, convert_png=False):
     
     #Fourier Analysis parameters
     chunk_secs = 2 #2
-    chunk_pix = 512
+    chunk_pix = 256
     num_chunks = 100
     cosine_window=True
     spatial_cuttoff_cpd = 14
@@ -250,15 +253,17 @@ def run_analysis(base_dir, trial_list_path, line_number, convert_png=False):
             movie_chunk_norm[i] = chunk_norm
             
         #write movie
+        print('Writing Movie...')
         fourcc = cv2.VideoWriter_fourcc(*'MPEG')
         video = cv2.VideoWriter(os.path.join(ana_folder, f'ExampleChunkVideo_{trace_type}_color.avi'), fourcc, 200, (chunk_pix,chunk_pix))
         for i in range(np.shape(movie_chunk_norm)[0]):
             video.write(np.uint8(movie_chunk_norm[i]))
         video.release()
+        np.save(os.path.join(ana_folder, f'ExampleChunkData_{trace_type}.npy'), movie_chunk)
             
         #get fourier transform of that trace & save output
         ps_3d, ps_2ds, fqs_space, fqs_time = stf.st_ps(movie_chunk, ppd, resample_fps,
-                                                      cosine_window=cosine_window, rm_dc=True, use_cupy_fft=False) 
+                                                      cosine_window=cosine_window, rm_dc=True, use_cupy_fft=False, bin_in_log=bin_in_log_flag) 
         ps_2d_all, ps_2d_vert, ps_2d_horiz, ps_2d_l_diag, ps_2d_r_diag = ps_2ds
 
         #save example of each raw data
@@ -317,7 +322,7 @@ def run_analysis(base_dir, trial_list_path, line_number, convert_png=False):
                 movie_chunk[i] = chunk    
             #get fourier transform of that trace & save output
             ps_3d, ps_2ds, fqs_space, fqs_time = stf.st_ps(movie_chunk, ppd, resample_fps,
-                                                        cosine_window=cosine_window, rm_dc=True, use_cupy_fft=False)
+                                                        cosine_window=cosine_window, rm_dc=True, use_cupy_fft=False, bin_in_log=bin_in_log_flag)
             ps_2d_all, ps_2d_vert, ps_2d_horiz, ps_2d_l_diag, ps_2d_r_diag = ps_2ds
 
             
