@@ -49,7 +49,9 @@ def run_analysis(analysis_base_dir,
     resample_fps = 200
     save_batchsize_ximea = 1000
     save_batchsize_depth = 1000
-    calibration_types = ['farpoint_eye_cal_pre', 'farpoint_eye_cal_post','left_eye_cal','right_eye_cal', 'val_eye_cal', 'pp_eye_cal', 'color_cal']
+    
+    #calibration_types = ['farpoint_eye_cal_pre', 'farpoint_eye_cal_post','left_eye_cal','right_eye_cal', 'val_eye_cal', 'pp_eye_cal', 'color_cal'] #don't have (or need) depth info for farpoint_eye_cal pre and post, pp, or color
+    calibration_types = ['left_eye_cal','right_eye_cal', 'val_eye_cal']
 
     #ximea spec params
     ximea_dims = (1544,2064)
@@ -73,7 +75,11 @@ def run_analysis(analysis_base_dir,
     task_name = trial_line['task']
     task_iter = str(trial_line['iter'])
     aperature_location = trial_line['aperature_setting']
+    skip_bool = trial_line['skip']
     print(f'This is subject {subject_name}, task {task_name}, iter {task_iter}.')
+    if(skip_bool==True):
+        print('Skipping this trial because skip boolean is True')
+        return()
     
     #put directory structures together for accessing data
     data_folder = os.path.join(bsdir, subject_name, date, str(trial_line['trial']).zfill(3))
@@ -107,7 +113,8 @@ def run_analysis(analysis_base_dir,
         print('Running .bin to .png conversion for Ximea.  This will likely take a few days...')
         
         #run conversion script on binary folder
-        bin2png.convert_trial_directory(bin_folder, png_folder, save_batchsize_ximea, ximea_intrinsics, ximea_distortion)
+        print('Skipping bin conversion temporarily, running only calibration folders.')
+        #bin2png.convert_trial_directory(bin_folder, png_folder, save_batchsize_ximea, ximea_intrinsics, ximea_distortion)
         print(f'Finished .bin to .png conversion for {ana_folder}.')
         
         #run conversion .bin to .png for calibrations if it hasn't been done already.
@@ -118,12 +125,13 @@ def run_analysis(analysis_base_dir,
                 folderid = trial_line[caltype]
                 calib_id = f'{date}_{folderid}' #can't use calib type in name because pre/post are shared for far point
                 calibration_png_folder = os.path.join(analysis_base_dir, subject_name, 'calib', calib_id, 'pngs')
-                if(Path(os.path.join(calibration_png_folder,'frame_0.png')).exists()):
-                    print(f'Found PNG Calibration folder for corresponding {caltype}.')
-                else:
-                    print(f'Did not find corresponding PNG calibration for {caltype}. Creating now at {calibration_png_folder}')
-                    calibration_bin_folder = os.path.join(bsdir, subject_name, date, str(trial_line[caltype]).zfill(3),'ximea','ximea')
-                    bin2png.convert_trial_directory(calibration_bin_folder, calibration_png_folder, save_batchsize_ximea, camera_intrinsics_filename)
+#                 if(Path(os.path.join(calibration_png_folder,'frame_0.png')).exists()):
+#                     print(f'Found PNG Calibration folder for corresponding {caltype}.')
+#                 else:
+                    #print(f'Did not find corresponding PNG calibration for {caltype}. Creating now at {calibration_png_folder}')
+                print(f'Creating PNGs for calibration for {caltype}: {calibration_png_folder}')
+                calibration_bin_folder = os.path.join(bsdir, subject_name, date, str(trial_line[caltype]).zfill(3),'ximea','ximea')
+                bin2png.convert_trial_directory(calibration_bin_folder, calibration_png_folder, save_batchsize_ximea, ximea_intrinsics, ximea_distortion)
         else:
             print('This is a manniquen (buddy) trial, no need to convert calibration trial pngs.')       
 
@@ -135,19 +143,16 @@ def run_analysis(analysis_base_dir,
         print('Running Depth Alignment to RGB & Ximea Space. This will take a few hours....')
         print(data_folder)
         print(ana_folder)  
-#         bag.create_aligned_depth_files(recording_folder=data_folder,
-#                                output_folder=ana_folder,
-#                                ximea_distortion=ximea_distortion, 
-#                                ximea_intrinsics=ximea_intrinsics, 
-#                                rgb_distortion=rsrgb_distortion, 
-#                                rgb_intrinsics=rsrgb_intrinsics, 
-#                                depth_distortion=None, 
-#                                depth_intrinsics=None, 
-#                                depth_to_rgb_rotation=None,
-#                                depth_to_rgb_translation=None,
-#                                rgb_to_ximea_rotation=rsrgb_to_ximea_extrinsics_rotation,
-#                                rgb_to_ximea_translation=rsrgb_to_ximea_extrinsics_translation
-#                               )
+        bag.create_aligned_depth_files(recording_folder=data_folder,
+                               output_folder=ana_folder,
+                               ximea_distortion=ximea_distortion, 
+                               ximea_intrinsics=ximea_intrinsics, 
+                               rgb_distortion=rsrgb_distortion, 
+                               rgb_intrinsics=rsrgb_intrinsics,
+                               rgb_to_ximea_rotation=rsrgb_to_ximea_extrinsics_rotation,
+                               rgb_to_ximea_translation=rsrgb_to_ximea_extrinsics_translation,
+                                       bag_in_path=f'/home/vasha/st-bravo_analysis/bag/sample_final-Copy{line_number}.bag'
+                              )
         
         #align depth -> RGB & Ximea for calibrations if it hasn't been done already.
         if(not trial_line['subject'] in ['bu']):
@@ -159,25 +164,19 @@ def run_analysis(analysis_base_dir,
                 calibration_raw_folder = os.path.join(bsdir, subject_name, date, str(trial_line[caltype]).zfill(3))
                 calibration_ana_folder = os.path.join(analysis_base_dir, subject_name, 'calib', calib_id)
                 calibration_bag_file = os.path.join(calibration_ana_folder, 'depth_ximea.bag')
-                if(Path(calibration_bag_file).exists()):
-                    print(f'Found Calibration Bag File for corresponding {caltype}.')
-                else:
-                    print(f'Did not find corresponding Calibration Bag File for {caltype}. Creating now: {calibration_bag_file}')
-                    print(calibration_raw_folder)
-                    print(calibration_ana_folder)                    
-#                     bag.create_aligned_depth_files(recording_folder=calibration_raw_folder,
-#                                output_folder=calibration_ana_folder,
-#                                ximea_distortion=ximea_distortion, 
-#                                ximea_intrinsics=ximea_intrinsics, 
-#                                rgb_distortion=rsrgb_distortion, 
-#                                rgb_intrinsics=rsrgb_intrinsics, 
-#                                depth_distortion=None, 
-#                                depth_intrinsics=None, 
-#                                depth_to_rgb_rotation=None,
-#                                depth_to_rgb_translation=None,
-#                                rgb_to_ximea_rotation=rsrgb_to_ximea_extrinsics_rotation,
-#                                rgb_to_ximea_translation=rsrgb_to_ximea_extrinsics_translation
-#                               )
+                print(f'Creating Calibration Bag File for {caltype}: {calibration_bag_file}')
+                print(calibration_raw_folder)
+                print(calibration_ana_folder)                    
+                bag.create_aligned_depth_files(recording_folder=calibration_raw_folder,
+                           output_folder=calibration_ana_folder,
+                           ximea_distortion=ximea_distortion, 
+                           ximea_intrinsics=ximea_intrinsics, 
+                           rgb_distortion=rsrgb_distortion,
+                           rgb_intrinsics=rsrgb_intrinsics,
+                           rgb_to_ximea_rotation=rsrgb_to_ximea_extrinsics_rotation,
+                           rgb_to_ximea_translation=rsrgb_to_ximea_extrinsics_translation,
+                                               bag_in_path=f'/home/vasha/st-bravo_analysis/bag/sample_final-Copy{line_number}.bag'
+                          )
                     
                     
         else:
@@ -204,9 +203,7 @@ def run_analysis(analysis_base_dir,
         print('Skipping Fourier Analysis')
         
     print(f'All Done with analysis for subject: {subject_name}, task: {task_name}, iter: {task_iter}!')
-        
-        
-
+    
 
 def main(args):
     parser = argparse.ArgumentParser()
