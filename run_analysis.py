@@ -141,8 +141,8 @@ def run_analysis(analysis_base_dir,
     # align depth -> RGB & Ximea space using realsense align_to function and .bag files
     if not skip_bag_align:
         print('Running Depth Alignment to RGB & Ximea Space. This will take a few hours....')
-        print(data_folder)
-        print(ana_folder)  
+        print(f'Data folder is: {data_folder}')
+        print(f'Analysis folder is: {ana_folder}')  
         bag.create_aligned_depth_files(recording_folder=data_folder,
                                output_folder=ana_folder,
                                ximea_distortion=ximea_distortion, 
@@ -151,7 +151,8 @@ def run_analysis(analysis_base_dir,
                                rgb_intrinsics=rsrgb_intrinsics,
                                rgb_to_ximea_rotation=rsrgb_to_ximea_extrinsics_rotation,
                                rgb_to_ximea_translation=rsrgb_to_ximea_extrinsics_translation,
-                                       bag_in_path=f'/home/vasha/st-bravo_analysis/bag/sample_final-Copy{line_number}.bag'
+                                       bag_in_path=f'/home/vasha/st-bravo_analysis/bag/sample_final.bag'
+                                       #bag_in_path=f'/home/vasha/st-bravo_analysis/bag/sample_final-Copy{line_number}.bag'
                               )
         
         #align depth -> RGB & Ximea for calibrations if it hasn't been done already.
