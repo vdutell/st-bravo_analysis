@@ -309,7 +309,7 @@ def align_depth_ximea(bag_in_path, bag_out_ximea_path, output_folder, aligned_xi
     finally:
         pipe.stop()
 
-    print('Finished Writing Ximea Aligned Depth Files - Deleting Bag File Now')
+    print('Finished Writing Ximea Aligned Depth Files - Leaving Bag File For Now')
     #os.remove(os.path.join(output_folder,'depth_ximea.bag'))
     
     return()
