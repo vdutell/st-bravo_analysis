@@ -67,7 +67,7 @@ def align_depth_rsrgb(bag_in_path, bag_out_rgb_path, output_folder, aligned_rgb_
                 depth_to_rgb_translation_message = msg.translation
                 depth_to_rgb_rotation_q_message = msg.rotation
                 
-        return(color_metadata_msg, depth_metadata_msg)
+        return(color_metadata_msg, depth_metadata_msg, depth_to_rgb_rotation_q_message, depth_to_rgb_translation_message )
 
         #fill up bag with depth & RGB frames
         depth_data_topic = '/device_0/sensor_0/Depth_0/image/data'
@@ -168,14 +168,16 @@ def align_depth_rsrgb(bag_in_path, bag_out_rgb_path, output_folder, aligned_rgb_
         pipe.stop()
         
     print('Finished Writing RGB Aligned Depth Files - Leaving Bag file for Now.')
-    #os.remove(os.path.join(output_folder,'depth_rgb.bag'))
-    return(color_metadata_msg, depth_metadata_msg)
+    os.remove(os.path.join(output_folder,'depth_rgb.bag'))
+    return(color_metadata_msg, depth_metadata_msg, depth_to_rgb_rotation_q_message, depth_to_rgb_translation_message)
 
 #yes it's terrible practice to do this and it should be a dictionary but i need to graduate.
 def align_depth_ximea(bag_in_path, bag_out_ximea_path, output_folder, aligned_ximea_depth_folder, 
                       depth_timestamps, depth_frames, depth_fps, depth_dims, rgb_dims, ximea_dims,
-                      rgb_to_ximea_rotation_q, rgb_to_ximea_translation,rgb_intrinsics, 
-                      rgb_distortion, ximea_intrinsics, ximea_distortion, color_metadata_msg, depth_metadata_msg):
+                      depth_to_ximea_rotation_q, depth_to_ximea_translation,
+                      #rgb_to_ximea_rotation_q, rgb_to_ximea_translation,
+                      #rgb_intrinsics, rgb_distortion, 
+                      ximea_intrinsics, ximea_distortion, color_metadata_msg, depth_metadata_msg):
     try:
         bag_in = rosbag.Bag(bag_in_path)             
         bag_out_ximea = rosbag.Bag(bag_out_ximea_path, 'w') 
@@ -204,12 +206,12 @@ def align_depth_ximea(bag_in_path, bag_out_ximea_path, output_folder, aligned_xi
                 bag_out_ximea.write(topic, msg, t)
             #depth images now have RGB sensor size, intrinsics, and distortion
             elif '/device_0/sensor_0/Depth_0/info/camera_info' == str(topic):
-                #msg.height = depth_dims[1]
-                #msg.width = depth_dims[0]
-                msg.height = rgb_dims[1]
-                msg.width = rgb_dims[0]
-                msg.D = [*rgb_distortion,0.0,0.0]
-                msg.K = [*rgb_intrinsics.flatten()]
+                msg.height = depth_dims[1]
+                msg.width = depth_dims[0]
+                #msg.height = rgb_dims[1]
+                #msg.width = rgb_dims[0]
+                #msg.D = [*rgb_distortion,0.0,0.0]
+                #msg.K = [*rgb_intrinsics.flatten()]
                 bag_out_ximea.write(topic, msg, t)
 
             #if topic is RGB stream info, ensure correct frame rate and size
@@ -225,13 +227,20 @@ def align_depth_ximea(bag_in_path, bag_out_ximea_path, output_folder, aligned_xi
 
             #if topic is RGB extrinsics, replace them with rgb to depth exrinsics
             elif '/device_0/sensor_1/Color_0/tf/0' == str(topic):
-                msg.rotation.x = rgb_to_ximea_rotation_q[0]
-                msg.rotation.y = rgb_to_ximea_rotation_q[1]
-                msg.rotation.z = rgb_to_ximea_rotation_q[2]
-                msg.rotation.w = rgb_to_ximea_rotation_q[3]
-                msg.translation.x = rgb_to_ximea_translation[0]
-                msg.translation.y = rgb_to_ximea_translation[1]
-                msg.translation.z = rgb_to_ximea_translation[2]
+#                 msg.rotation.x = rgb_to_ximea_rotation_q[0]
+#                 msg.rotation.y = rgb_to_ximea_rotation_q[1]
+#                 msg.rotation.z = rgb_to_ximea_rotation_q[2]
+#                 msg.rotation.w = rgb_to_ximea_rotation_q[3]
+#                 msg.translation.x = rgb_to_ximea_translation[0]
+#                 msg.translation.y = rgb_to_ximea_translation[1]
+#                 msg.translation.z = rgb_to_ximea_translation[2]
+                msg.rotation.x = depth_to_ximea_rotation_q[0]
+                msg.rotation.y = depth_to_ximea_rotation_q[1]
+                msg.rotation.z = depth_to_ximea_rotation_q[2]
+                msg.rotation.w = depth_to_ximea_rotation_q[3]
+                msg.translation.x = depth_to_ximea_translation[0]
+                msg.translation.y = depth_to_ximea_translation[1]
+                msg.translation.z = depth_to_ximea_translation[2]
             else:
                 #keep everything else
                 bag_out_ximea.write(topic, msg, t)
@@ -310,7 +319,7 @@ def align_depth_ximea(bag_in_path, bag_out_ximea_path, output_folder, aligned_xi
         pipe.stop()
 
     print('Finished Writing Ximea Aligned Depth Files - Leaving Bag File For Now')
-    #os.remove(os.path.join(output_folder,'depth_ximea.bag'))
+    os.remove(os.path.join(output_folder,'depth_ximea.bag'))
     
     return()
 
@@ -363,22 +372,22 @@ def create_aligned_depth_files(recording_folder, output_folder,
     os.makedirs(aligned_ximea_depth_folder, exist_ok=True)
     
     print('Aligning Depth to Realsense RGB')
-    color_metadata_msg, depth_metadata_msg = align_depth_rsrgb(bag_in_path, bag_out_rgb_path, output_folder, aligned_rgb_depth_folder, 
+    color_metadata_msg, depth_metadata_msg, depth_to_rgb_rotation_q_message, depth_to_rgb_translation_message = align_depth_rsrgb(bag_in_path, bag_out_rgb_path, output_folder, aligned_rgb_depth_folder, 
                                            depth_timestamps, depth_frames, depth_fps, depth_dims, rgb_dims)
     
     #convert rgb to depth quaternion to rotation matrix
-    #depth_to_rgb_rotation = Rotation.from_quat(np.array((depth_to_rgb_rotation_q_message.x,
-    #                                   s                  depth_to_rgb_rotation_q_message.y,
-    #                                                     depth_to_rgb_rotation_q_message.z,
-    #                                                    depth_to_rgb_rotation_q_message.w))).as_dcm()
-    #depth_to_rgb_translation = np.array((depth_to_rgb_translation_message.x,
-    #                                     depth_to_rgb_translation_message.y,
-    #                                     depth_to_rgb_translation_message.z))
+    depth_to_rgb_rotation = Rotation.from_quat(np.array((depth_to_rgb_rotation_q_message.x,
+                                                        depth_to_rgb_rotation_q_message.y,
+                                                        depth_to_rgb_rotation_q_message.z,
+                                                       depth_to_rgb_rotation_q_message.w))).as_dcm()
+    depth_to_rgb_translation = np.array((depth_to_rgb_translation_message.x,
+                                        depth_to_rgb_translation_message.y,
+                                        depth_to_rgb_translation_message.z))
     #combine rgb to depth with ximea to rgb to get ximea  to depth
-    #depth_to_ximea_rotation = rgb_to_ximea_rotation @ depth_to_rgb_rotation
-    #depth_to_ximea_translation = rgb_to_ximea_rotation @ depth_to_rgb_translation + rgb_to_ximea_translation
+    depth_to_ximea_rotation = rgb_to_ximea_rotation @ depth_to_rgb_rotation
+    depth_to_ximea_translation = rgb_to_ximea_rotation @ depth_to_rgb_translation + rgb_to_ximea_translation
 
-    #depth_to_ximea_rotation_q = Rotation.from_dcm(depth_to_ximea_rotation).as_quat()
+    depth_to_ximea_rotation_q = Rotation.from_dcm(depth_to_ximea_rotation).as_quat()
     
 #    print(f'RGB -> Depth extrinsics rotations are: {np.array((depth_to_rgb_rotation_q_message.x,depth_to_rgb_rotation_q_message.y,depth_to_rgb_rotation_q_message.z,depth_to_rgb_rotation_q_message.w))}')
 #    print(f'RGB -> Depth extrinsics translations are: {depth_to_rgb_translation}')
@@ -388,15 +397,16 @@ def create_aligned_depth_files(recording_folder, output_folder,
     #read in new depth files
     #depth_timestamps = list(np.loadtxt(os.path.join(recording_folder,'depth','timestamps.csv'))) #same as above
     #depth_frames = [cv2.imread(os.path.join(aligned_rgb_depth_folder,f'depth_frame_{str(f).zfill(8)}.png')) for f in range(len(depth_timestamps))]
-    depth_frames = [np.load(os.path.join(aligned_rgb_depth_folder,f'depth_frame_{str(f).zfill(8)}.npy')) for f in range(len(depth_timestamps))]
-    depth_frames = depth_frames[:len(depth_timestamps)]
+    #depth_frames = [np.load(os.path.join(aligned_rgb_depth_folder,f'depth_frame_{str(f).zfill(8)}.npy')) for f in range(len(depth_timestamps))]
+    #depth_frames = depth_frames[:len(depth_timestamps)]
     
     #Write Depth -> Ximea Bag File
     print('Aligning Depth to Ximea')
     align_depth_ximea(bag_in_path, bag_out_ximea_path, output_folder, aligned_ximea_depth_folder, 
                       depth_timestamps, depth_frames, depth_fps, depth_dims, rgb_dims, ximea_dims,
-                      rgb_to_ximea_rotation_q, rgb_to_ximea_translation,rgb_intrinsics, 
-                      rgb_distortion, ximea_intrinsics, ximea_distortion, color_metadata_msg, depth_metadata_msg)
+                      depth_to_ximea_rotation_q, depth_to_ximea_translation,
+                      #rgb_intrinsics, rgb_distortion, 
+                      ximea_intrinsics, ximea_distortion, color_metadata_msg, depth_metadata_msg)
 
     print('All Done!')
 
