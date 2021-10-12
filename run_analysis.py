@@ -74,7 +74,7 @@ def run_analysis(analysis_base_dir,
     trial_num = str(trial_line['trial']).zfill(3)
     task_name = trial_line['task']
     task_iter = str(trial_line['iter'])
-    aperature_location = trial_line['aperature_setting']
+    aperature_location = trial_line['aperature_setting'] ####TMP!!!!
     skip_bool = trial_line['skip']
     print(f'This is subject {subject_name}, task {task_name}, iter {task_iter}.')
     if(skip_bool==True):
@@ -106,7 +106,9 @@ def run_analysis(analysis_base_dir,
     rsrgb_intrinsics = np.array(np.loadtxt(os.path.join(camera_intrinsics_folder,'Intrinsics_RS.txt'), delimiter=','), dtype='float32')
     #Extrinsics (ximea to realsense)
     rsrgb_to_ximea_extrinsics_rotation = np.loadtxt(os.path.join(camera_intrinsics_folder,'Rotation_matrix.txt'), delimiter=',')
+    rsrgb_to_ximea_extrinsics_rotation = rsrgb_to_ximea_extrinsics_rotation * np.array(((1,-1,-1),(-1,1,-1),(-1,-1,1)))
     rsrgb_to_ximea_extrinsics_translation = np.loadtxt(os.path.join(camera_intrinsics_folder,'Translation_vector.txt'), delimiter=',')
+    rsrgb_to_ximea_extrinsics_translation = 1e-3 * rsrgb_to_ximea_extrinsics_translation 
     
     #Run .bin to png conversion for ximea data
     if not skip_convert_png:
