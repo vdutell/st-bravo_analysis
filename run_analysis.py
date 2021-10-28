@@ -15,6 +15,7 @@ import utils.tracegen as tracegen
 import utils.traceconvert as traceconvert
 import stftoolkit as stf
 import utils.bag_alignment as bag
+import utils.gaze_map_matlab.launch_calibration as launch_calibration
 
 
 def run_analysis(analysis_base_dir,
@@ -59,8 +60,8 @@ def run_analysis(analysis_base_dir,
     
     #Fourier Analysis parameters
     chunk_secs = 2
-    chunk_pix = 512
-    num_chunks = 500
+    chunk_pix = 256
+    num_chunks = 200
     cosine_window = True
     spatial_cuttoff_cpd = 14
     temporal_cuttoff_fps = np.inf
@@ -80,6 +81,12 @@ def run_analysis(analysis_base_dir,
     if(skip_bool==True):
         print('Skipping this trial because skip boolean is True')
         return()
+    
+    #flag this as a human or buddy (fixed camera) trial
+    if(trial_line['subject'] in ['bu']):
+        has_fixations = False
+    else:
+        has_fixations = True
     
     #put directory structures together for accessing data
     data_folder = os.path.join(bsdir, subject_name, date, str(trial_line['trial']).zfill(3))
@@ -110,7 +117,9 @@ def run_analysis(analysis_base_dir,
     rsrgb_to_ximea_extrinsics_translation = np.loadtxt(os.path.join(camera_intrinsics_folder,'Translation_vector.txt'), delimiter=',')
     rsrgb_to_ximea_extrinsics_translation = 1e-3 * rsrgb_to_ximea_extrinsics_translation 
     
+    ##################################################################################
     #Run .bin to png conversion for ximea data
+    ##########################################################################################
     if not skip_convert_png:
         print('Running .bin to .png conversion for Ximea.  This will likely take a few days...')
         
@@ -139,8 +148,9 @@ def run_analysis(analysis_base_dir,
 
     else:
         print('Skipping .bin to .png conversion for Ximea.')
-        
+    ######################################################################################### 
     # align depth -> RGB & Ximea space using realsense align_to function and .bag files
+    ##########################################################################################
     if not skip_bag_align:
         print('Running Depth Alignment to RGB & Ximea Space. This will take a few hours....')
         print(f'Data folder is: {data_folder}')
@@ -156,45 +166,121 @@ def run_analysis(analysis_base_dir,
                                        bag_in_path=f'/home/vasha/st-bravo_analysis/bag/sample_final.bag'
                                        #bag_in_path=f'/home/vasha/st-bravo_analysis/bag/sample_final-Copy{line_number}.bag'
                               )
-        
+        ##########################################################################################
         #align depth -> RGB & Ximea for calibrations if it hasn't been done already.
-        if(not trial_line['subject'] in ['bu']):
-            print('This is a human trial with calibrations. Searching for corresponding calibration pngs')
-            for caltype in calibration_types:
+        ##########################################################################################
+        if(has_fixations):
+            print('This is a human trial with calibrations. Searching for corresponding calibration pngs....')
+            for i, caltype in enumerate(calibration_types):
                 #create unique identifier for calibration called calib_id
                 folderid = trial_line[caltype]
                 calib_id = f'{date}_{folderid}' #can't use calib type in name because pre/post are shared for far point
                 calibration_raw_folder = os.path.join(bsdir, subject_name, date, str(trial_line[caltype]).zfill(3))
                 calibration_ana_folder = os.path.join(analysis_base_dir, subject_name, 'calib', calib_id)
-                calibration_bag_file = os.path.join(calibration_ana_folder, 'depth_ximea.bag')
-                print(f'Creating Calibration Bag File for {caltype}: {calibration_bag_file}')
-                print(calibration_raw_folder)
-                print(calibration_ana_folder)                    
-                bag.create_aligned_depth_files(recording_folder=calibration_raw_folder,
-                           output_folder=calibration_ana_folder,
-                           ximea_distortion=ximea_distortion, 
-                           ximea_intrinsics=ximea_intrinsics, 
-                           rgb_distortion=rsrgb_distortion,
-                           rgb_intrinsics=rsrgb_intrinsics,
-                           rgb_to_ximea_rotation=rsrgb_to_ximea_extrinsics_rotation,
-                           rgb_to_ximea_translation=rsrgb_to_ximea_extrinsics_translation,
-                                               bag_in_path=f'/home/vasha/st-bravo_analysis/bag/sample_final-Copy{line_number}.bag'
-                          )
-                    
-                    
+                calibration_bag_file = os.path.join(calibration_ana_folder, 'depth_rgb.bag')
+                if(os.path.isfile(calibration_bag_file)):
+                    print(f'Skipping {caltype} calibration: its already been created at: {calibration_bag_file}')
+                else:
+                    print(f'Running {caltype} calibration: {i+1}/{len(calibration_types)}')
+                    print(f'Creating Calibration Bag File for {caltype}: {calibration_bag_file}')
+                    #print(calibration_raw_folder)
+                    #print(calibration_ana_folder)                    
+                    bag.create_aligned_depth_files(recording_folder=calibration_raw_folder,
+                               output_folder=calibration_ana_folder,
+                               ximea_distortion=ximea_distortion, 
+                               ximea_intrinsics=ximea_intrinsics, 
+                               rgb_distortion=rsrgb_distortion,
+                               rgb_intrinsics=rsrgb_intrinsics,
+                               rgb_to_ximea_rotation=rsrgb_to_ximea_extrinsics_rotation,
+                               rgb_to_ximea_translation=rsrgb_to_ximea_extrinsics_translation,
+                               bag_in_path=f'/home/vasha/st-bravo_analysis/bag/sample_final-Copy{line_number}.bag' #individual bag per trial avoids i/o problems when runing multiple instances of this function
+                                                  )
+                             
         else:
             print('This is a manniquen (buddy) trial, no need to convert calibration trial pngs.')       
         
     else:
         print('Skipping Depth Alignment to RGB & Ximea Space')
 
+        
+    ##################################################################################
     # run eye tracking calibration unless we want to skip OR is a manniquen (buddy) trial
-    if (not skip_calibration) or (not trial_line['subject'] in ['bu']):
-        print('Running gaze point localization based on matching calibration trial....')
+    ##########################################################################################
+    if (not skip_calibration) and (has_fixations):
+        print('Running gaze point mapping for matching calibration trials...')
+        #calibration IDS
+        calib_left_path = os.path.join(bsdir, subject_name, date, str(trial_line['left_eye_cal']).zfill(3))
+        calib_right_path = os.path.join(bsdir, subject_name, date, str(trial_line['right_eye_cal']).zfill(3))
+        calib_val_path = os.path.join(bsdir, subject_name, date, str(trial_line['val_eye_cal']).zfill(3))
+        calib_id_left = f'{date}_{trial_line["left_eye_cal"]}'
+        calib_id_right = f'{date}_{trial_line["right_eye_cal"]}'
+        calib_id_val = f'{date}_{trial_line["val_eye_cal"]}'
+        calib_left_depth = os.path.join(analysis_base_dir, subject_name, 'calib', calib_id_left)
+        calib_right_depth = os.path.join(analysis_base_dir, subject_name, 'calib', calib_id_right)
+        calib_val_depth = os.path.join(analysis_base_dir, subject_name, 'calib', calib_id_val)
+        #calibration filepaths
+#         calibration_map_file_left = os.path.join(analysis_base_dir, subject_name, 'calib', calib_id_left,'calib_map.npy')
+#         calibration_map_file_right = os.path.join(analysis_base_dir, subject_name, 'calib', calib_id_right,'calib_map.npy')
+#         calibration_map_file_val = os.path.join(analysis_base_dir, subject_name, 'calib', calib_id_val,'calib_map.npy')
+        
+#         if(os.path.isfile(calibration_map_file_val)):
+#             print(f'Skipping Gaze localization - Validation calibration map file already been created at: {calibration_map_file_val}')
+#         else:
+#             calib.run_gaze_mapper(calib_id_left, calib=True) #write this function - probably need more args
+#             calib.run_gaze_mapper(calib_id_right, calib=True)
+#             calib.run_gaze_mapper(calib_id_val, val=True)
+
+        #check if gaze mapping has been done for this trial.
+        print('Running Gaze Mapping for Trial')        
+        trial_map_file = os.path.join(ana_folder, 'gaze_map.npy') #this is not the correct path, this will always run
+        if(os.path.isfile(trial_map_file)):
+            print(f'Found Gaze Mapping for this trial at {trial_map_file}. Skipping!')
+        else:
+            print('Didnt find Gaze Mapping for this trial. Runing now...')
+            launch_calibration.run_gaze_mapping(data_folder, calib_left_path, calib_left_depth,calib_right_path, calib_right_depth, data_folder, ana_folder, ana_folder)
+
+        
     else:
         print('Skipping Eye Tracking & Calibration Analysis')
         
+    ########################################################################################## 
+    # Create Unified Timeline at 200 Hz, upsampling as needed from each stream
+    ##########################################################################################
+    #dont need an option to skip this - it's really quick.
+    
+    #convert ximea timestamps into unix timelime (to match other devices)
+    ximea_camera_timestamp_file = os.path.join(data_folder,'ximea', 'timestamps_ximea.tsv')
+    ximea_sync_file = os.path.join(data_folder,'ximea', 'timestamp_camsync_ximea.tsv')
+    ximea_timeline = timeline.convert_ximea_time_to_unix_time(ximea_camera_timestamp_file, ximea_sync_file)
+    
+    #read in other timelines (these are already in unix time)
+    rsrgb_timeline = np.load(os.path.join(data_folder,'world_timestamps.npy'))
+    depth_timeline = np.loadtxt(os.path.join(data_folder, 'depth','timestamps.csv'))
+
+    timeline_list = [ximea_timeline, rsrgb_timeline, depth_timeline]
+
+    #if its a human trial need to unify gazepoint and IMU timeline
+    if(has_fixations):
+        #gazepoint_timeline = np.load(os.path.join(ana_folder,'gazepoint_timeline.npy')) #TODO: fix this path
+        left_eye_timeline = np.load(os.path.join(data_folder,'eye0_timestamps.npy'))
+        #right_eye_timeline = np.load(os.path.join(ana_folder,'eye1_timestamps.npy'))
+        head_tracker_timeline = np.load(os.path.join(data_folder,'odometry_head_timestamps.npy'))
+        body_tracker_timeline = np.load(os.path.join(data_folder,'odometry_body_timestamps.npy'))
+        timeline_list.extend([left_eye_timeline, head_tracker_timeline, body_tracker_timeline])
+        #assign timeline with gaze & tracker info
+        common_timeline, idx_matchlist = timeline.assign_common_timeline(timeline_list, target_fps=resample_fps)
+        ximea_framelist, rsrgb_framelist, depth_framelist, gaze_framelist, head_tracker_framelist, body_tracker_framelist = idx_matchlist
+    # if buddy trial only ximea, rsrgb, and depth framelist    
+    else:
+        #assign timeline without gaze & tracker info
+        common_timeline, idx_matchlist = timeline.assign_common_timeline(timeline_list, target_fps=resample_fps)
+        ximea_framelist, rsrgb_framelist, depth_framelist = idx_matchlist
+    
+        
+        
+    ########################################################################################## 
     # run fourier analysis (Power Spectrum Calculation)    
+    ##########################################################################################
     if not skip_fourier:
         print(f'Running Fourier Analaysis for {num_chunks} chunks of size {chunk_pix} pixels....')
 
@@ -202,9 +288,83 @@ def run_analysis(analysis_base_dir,
         chunk_frames = int(chunk_secs*resample_fps)
         ximea_horizontal_ppd = ximea_dims[1]/ximea_horizontal_fov_deg
         ppd = ximea_horizontal_ppd
+            
+        #assign trace types - Buddy doesn't have foveal trace
+        if(has_fixations):
+            #trace_types = ['fixed_central','fixed_rand_start','foveal','periph_l',
+            #'periph_r','periph_u','periph_d']
+            trace_types = ['fixed_central', 'foveal', 'fixed_rand_start']
+        else:
+            trace_types = ['fixed_central', 'fixed_rand_start']
+        
+        #loop over trace types
+        for trace_type in trace_types:
+        
+            #save a single example
+            np.save(os.path.join(ana_folder, f'Example3dPowerSpec_{trace_type}.npy'), ps_3d)
+            np.save(os.path.join(ana_folder, f'Example2dPowerSpec_{trace_type}.npy'), ps_2d)
+            np.save(os.path.join(ana_folder, f'Example3dPowerSpecFreqsSpace_{trace_type}.npy'), fqs_space)
+            np.save(os.path.join(ana_folder, f'Example3dPowerSpecFreqsTime_{trace_type}.npy'), fqs_time)
+
+            ################## NOW LOOP OVER NUM_CHUNKS AND ACCUMULATE #####################
+            print(f'Taking Mean of {num_chunks} traces of type {trace_type}...')
+            #store mean values in arrays
+            ps_3d_mean = np.zeros_like(ps_3d)
+            ps_2d_all_mean = np.zeros_like(ps_2d_all)
+            ps_2d_vert_mean = np.zeros_like(ps_2d_vert)
+            ps_2d_horiz_mean = np.zeros_like(ps_2d_horiz)
+            ps_2d_l_diag_mean = np.zeros_like(ps_2d_l_diag)
+            ps_2d_r_diag_mean = np.zeros_like(ps_2d_r_diag)
+            for i in range(num_chunks):
+                
+                trace_start_idx, trace_lcorner_xy = tracegen.generate_trace(trace_type=trace_type,
+                                                                            chunk_samples=chunk_frames,
+                                                                            chunk_dim=chunk_pix, frame_dims=img_dims,
+                                                                            timeline_len=len(common_timeline),
+                                                                            pupil_positions=pupil_positions, ppd=ppd,
+                                                                            degrees_eccentricity=degrees_ecc,
+                                                                            validation_tstart=VALIDATION_TSTART)
+                chunk_frame_indices = ximea_frame_idx[trace_start_idx:trace_start_idx+chunk_frames]
+                #pull out the movie chunk corresponding to this trace
+                movie_chunk = np.zeros((chunk_frames, chunk_pix, chunk_pix, 3))
+                for i, f in enumerate(chunk_frame_indices):
+                    print('*',end='')
+                    frame = cv2.imread(os.path.join(png_folder,f'frame_{f}.png'))
+                    chunk = frame[trace_lcorner_xy[i,1]:trace_lcorner_xy[i,1]+chunk_pix, 
+                                           trace_lcorner_xy[i,0]:trace_lcorner_xy[i,0]+chunk_pix]
+                    movie_chunk[i] = chunk    
+                #get fourier transform of that trace & save output
+                ps_3d, ps_2ds, fqs_space, fqs_time = stf.st_ps(movie_chunk, ppd, resample_fps,
+                                                            cosine_window=cosine_window, rm_dc=True)
+                ps_2d_all, ps_2d_vert, ps_2d_horiz, ps_2d_l_diag, ps_2d_r_diag = ps_2ds
+
+                ps_3d_mean += ps_3d
+                ps_2d_all_mean += ps_2d_all
+                ps_2d_vert_mean += ps_2d_vert
+                ps_2d_horiz_mean += ps_2d_horiz
+                ps_2d_l_diag_mean += ps_2d_l_diag
+                ps_2d_r_diag_mean += ps_2d_r_diag
+    
+        #take mean of all trace types for this trial
+        print(f'Finished Calculating Power Spectra for Trace Type {trace_type}. Now saving...')
+        np.save(os.path.join(ana_folder, f'Mean3dPowerSpec_{trace_type}.npy'), ps_3d_mean)
+        np.save(os.path.join(ana_folder, f'Mean2dAllPowerSpec_{trace_type}.npy'), ps_2d_all_mean)
+        np.save(os.path.join(ana_folder, f'Mean2dVertPowerSpec_{trace_type}.npy'), ps_2d_vert_mean)
+        np.save(os.path.join(ana_folder, f'Mean2dHorizPowerSpec_{trace_type}.npy'), ps_2d_horiz_mean)
+        np.save(os.path.join(ana_folder, f'Mean2dLDiagPowerSpec_{trace_type}.npy'), ps_2d_l_diag_mean)
+        np.save(os.path.join(ana_folder, f'Mean2dRDiagPowerSpec_{trace_type}.npy'), ps_2d_r_diag_mean)
+        np.save(os.path.join(ana_folder, f'Mean3dPowerSpecFreqsSpace_{trace_type}.npy'), fqs_space)
+        np.save(os.path.join(ana_folder, f'Mean3dPowerSpecFreqsTime_{trace_type}.npy'), fqs_time)    
+        stf.da_plot_power(ps_2d_mean, fqs_space, fqs_time, show_onef_line=True, logscale=True,
+                  figname=f'MeanPowerSpec_{num_chunks}_chunks_{trace_type}', 
+                  saveloc=ana_folder, grey_contour=False)
+        
     else:
         print('Skipping Fourier Analysis')
         
+    ########################################################################
+    ## FINISHED
+    ###############################################################################
     print(f'All Done with analysis for subject: {subject_name}, task: {task_name}, iter: {task_iter}!')
     
 
@@ -217,7 +377,7 @@ def main(args):
     parser.add_argument("-l", "--line_number", help="line number in trial_list to analyze", type=int)
     parser.add_argument("-p", "--skip_convert_png", help="skip convert ximea .bin to pngs", type=bool, default=True)
     parser.add_argument("-b", "--skip_bag_align", help="skip bag alignment", type=bool, default=False)
-    parser.add_argument("-c", "--skip_calibration", help="skip eye tracking calibration", type=bool, default=False)
+    parser.add_argument("-c", "--skip_calibration", help="skip eye tracking calibration", type=bool, default=True)
     parser.add_argument("-f", "--skip_fourier", help="skip fourier analysis", type=bool, default=False)
     #parser.add_argument("-s", "--stop_time", help="time to stop analysis")
    
