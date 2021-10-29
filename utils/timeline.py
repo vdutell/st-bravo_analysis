@@ -101,18 +101,19 @@ def assign_common_timeline(timeline_list, target_fps, start_at_zero=False, start
     '''
     
     #create common timeline
+    #print(len(timeline_list))
+    #[print(len(t)) for t in timeline_list]
+    #[print(timeline[-1]) for timeline in timeline_list]
     start_timestamp = np.max([timeline[0] for timeline in timeline_list])
     end_timestamp = np.min([timeline[-1] for timeline in timeline_list])
     
     #adjust start and end time if applicable
-    if not np.isnan(starttime):
-        start_timestamp = start_timestamp + int(starttime)
-    if not np.isnan(endtime):
-        end_timestamp = start_timestamp + int(endtime)
-    
+#     if not np.isnan(starttime):
+#         start_timestamp = start_timestamp + int(starttime)
+#     if not np.isnan(endtime):
+#         end_timestamp = start_timestamp + int(endtime)
     
     common_timeline = np.arange(start_timestamp, end_timestamp, 1./target_fps)
-    
     sampleidxmatch_list = [np.zeros_like(common_timeline) for _ in timeline_list]
     
     for i, sample_timeline in enumerate(timeline_list):

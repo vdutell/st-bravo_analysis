@@ -113,7 +113,7 @@ def bin_to_im(binfile, nframe, dims=(1544,2064),quickread=True):
 
 
 
-def ximea_get_frame(frame_number, save_batchsize, cam_save_folder, img_dims=(1544,2064)):
+def ximea_get_frame(frame_number, save_batchsize=1000, cam_save_folder='.', img_dims=(1544,2064)):
     '''
     Get the filename and offset of a given frame number from the camera.
     Params:
@@ -130,11 +130,58 @@ def ximea_get_frame(frame_number, save_batchsize, cam_save_folder, img_dims=(154
     frame_offset = frame_number%file_start if file_start>0 else frame_number
     file_name = f'frames_{file_start}_{file_end}.bin'
     file_path = os.path.join(cam_save_folder, file_name)
-    print(file_path, frame_offset, img_dims)
     
     frame = bin_to_im(file_path, frame_offset, img_dims)
 
     return(frame)
+    
+    
+def depth_get_frame(frame_number, cam_save_folder, save_batchsize=1000):
+    '''
+    Get the filename and offset of a given frame number from the camera.
+    Params:
+        frame_number (int): number of frame desired
+        save_bathsize (int): what was the batchsize during collection?
+        cam_save_folder (str): what is the name of the folder?
+        img_dims (int, int): dimensions of frame reading in.
+    Returns:
+        frame (2d numpy array): 2d array of frame from saved file
+    '''
+    
+    file_start = int(np.floor(frame_number/save_batchsize)*save_batchsize)
+    file_end = file_start + save_batchsize - 1
+    frame_offset = frame_number%file_start if file_start>0 else frame_number
+    file_name = f'depth_frames_{str(file_start).zfill(8)}_{str(file_end).zfill(8)}.npy'
+    file_path = os.path.join(cam_save_folder, file_name)
+    depth_frames_batch = np.load(file_path)
+    frame = depth_frames_batch[frame_offset]
+    return(frame)
+
+def depth_get_all_frames(cam_save_folder, save_batchsize=1000):
+    '''
+    Get the filename and offset of a given frame number from the camera.
+    Params:
+        frame_number (int): number of frame desired
+        save_bathsize (int): what was the batchsize during collection?
+        cam_save_folder (str): what is the name of the folder?
+        img_dims (int, int): dimensions of frame reading in.
+    Returns:
+        frame (2d numpy array): 2d array of frame from saved file
+    '''
+    frames = []
+    for fnum in range(1000):
+        file_start = save_batchsize * fnum
+        file_end = file_start + save_batchsize-1
+        file_name = f'depth_frames_{str(file_start).zfill(8)}_{str(file_end).zfill(8)}.npy'
+        file_path = os.path.join(cam_save_folder, file_name)
+        #print(file_path)
+        if not os.path.exists(file_path):
+            return(frames)
+        else:
+            depth_frames_batch = np.load(file_path)
+            [frames.append(f) for f in depth_frames_batch if np.mean(f) != 0]
+    return(frames)
+
     
     
 # # idx = int(sys.argv[1])

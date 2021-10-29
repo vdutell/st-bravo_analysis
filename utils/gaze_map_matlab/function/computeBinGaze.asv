@@ -1,0 +1,64 @@
+function BIN_EYE = computeBinGaze(LEFT_EYE_GAZE,RIGHT_EYE_GAZE,CALIB)
+
+PL = computeEULER_to_XYZ(LEFT_EYE_GAZE(:,1), LEFT_EYE_GAZE(:,2));
+PL = RotTras(PL,CALIB.LE.R,CALIB.LE.POS,'back');
+
+PR = computeEULER_to_XYZ(RIGHT_EYE_GAZE(:,1), RIGHT_EYE_GAZE(:,2));
+PR = RotTras(PR,CALIB.LE.R,CALIB.RE.POS,'back');
+
+% figure,plot(PL(:,1),PR(:,2),'.')
+
+OL = CALIB.LE.POS;
+OR = CALIB.RE.POS;
+OB = 0.5 * (OL + OR);
+for i = 1:length(PL)
+    
+    [Intersection_to_all, Intersection_to_line] = computeOptimalIntersection([OL;OR],n)
+    
+    TL = PL(i,:) - OL;
+    TR = PR(i,:) - OR;
+    
+    n = cross(TL,TR);
+    
+    A = norm(TL).^2;
+    B = 2*(TL*OL' - TL*OR');
+    C = 2*TL*TR';
+    D = 2*(TR*OR' - TR*OL');
+    E = norm(TR).^2;
+    F = norm(OL).^2 + norm(OR).^2;
+    
+    tR = (2*A*D + B*C) ./ (C.^2 - 4*A*E);
+    tL = (C*tR - B) ./ (2*A);
+    
+    NPL(i,:) = tL*TL + OL;
+    NPR(i,:) = tR*TR + OR;
+    
+%     figure,hold on
+%     plot3(OL(1),OL(3),OL(2),'ob')
+%     plot3(OR(1),OR(3),OR(2),'or')
+%     
+%     plot3(NPL(1),NPL(3),NPL(2),'ob')
+%     plot3(NPR(1),NPR(3),NPR(2),'or')
+    
+    PB(i,:) = 0.5*(NPL(i,:) + NPR(i,:));
+    TB(i,:) = PB(i,:) - OB;
+    TB(i,:) = TB(i,:) ./ norm(TB(i,:)); 
+    
+    ERROR(i) = norm(NPL(i,:) + NPR(i,:));
+end
+
+BIN_EYE.FP = PB;
+BIN_EYE.FPL = PB;
+BIN_EYE.FPR = PB;
+BIN_EYE.ERROR = ERROR;
+
+
+
+
+
+
+
+
+
+
+

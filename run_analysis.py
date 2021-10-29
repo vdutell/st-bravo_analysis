@@ -13,9 +13,11 @@ import utils.bins_to_pngs as bin2png
 import utils.timeline as timeline
 import utils.tracegen as tracegen
 import utils.traceconvert as traceconvert
+import utils.plotting as plu
 import stftoolkit as stf
 import utils.bag_alignment as bag
 import utils.gaze_map_matlab.launch_calibration as launch_calibration
+import utils.convert_pldata.py as conpl
 
 
 def run_analysis(analysis_base_dir,
@@ -23,7 +25,8 @@ def run_analysis(analysis_base_dir,
                  skip_convert_png=True,
                  skip_bag_align=False,
                  skip_calibration=False,
-                 skip_fourier=False):
+                 skip_fourier=False,
+                 skip_gaze_dependencies=False):
     '''
     Mother script to run analysis of a single trial (line from excel trial list spreadsheet)
     Params:
@@ -57,11 +60,12 @@ def run_analysis(analysis_base_dir,
     #ximea spec params
     ximea_dims = (1544,2064)
     ximea_horizontal_fov_deg = 61
+    degrees_ecc = 30 #for peripheral gaze chunking *not yet implemented*
     
     #Fourier Analysis parameters
-    chunk_secs = 2
-    chunk_pix = 256
-    num_chunks = 200
+    chunk_secs = 1
+    chunk_pix = 512 #256
+    num_chunks = 250
     cosine_window = True
     spatial_cuttoff_cpd = 14
     temporal_cuttoff_fps = np.inf
@@ -84,6 +88,8 @@ def run_analysis(analysis_base_dir,
     
     #flag this as a human or buddy (fixed camera) trial
     if(trial_line['subject'] in ['bu']):
+        has_fixations = False
+    elif(skip_gaze_dependencies):
         has_fixations = False
     else:
         has_fixations = True
@@ -129,7 +135,7 @@ def run_analysis(analysis_base_dir,
         print(f'Finished .bin to .png conversion for {ana_folder}.')
         
         #run conversion .bin to .png for calibrations if it hasn't been done already.
-        if(not trial_line['subject'] in ['bu']):
+        if(has_fixations):
             print('This is a human trial with calibrations. Searching for corresponding calibration pngs')
             for caltype in calibration_types:
                 #create unique identifier for calibration called calib_id
@@ -237,6 +243,9 @@ def run_analysis(analysis_base_dir,
             print(f'Found Gaze Mapping for this trial at {trial_map_file}. Skipping!')
         else:
             print('Didnt find Gaze Mapping for this trial. Runing now...')
+            #first convert pldata file with pupil positions to CSV file.
+            conpl.convert_pldata_csv(os.path.join(data_folder,'offline_data',),
+                                     'offline_pupil.pldata')
             launch_calibration.run_gaze_mapping(data_folder, calib_left_path, calib_left_depth,calib_right_path, calib_right_depth, data_folder, ana_folder, ana_folder)
 
         
@@ -251,7 +260,7 @@ def run_analysis(analysis_base_dir,
     #convert ximea timestamps into unix timelime (to match other devices)
     ximea_camera_timestamp_file = os.path.join(data_folder,'ximea', 'timestamps_ximea.tsv')
     ximea_sync_file = os.path.join(data_folder,'ximea', 'timestamp_camsync_ximea.tsv')
-    ximea_timeline = timeline.convert_ximea_time_to_unix_time(ximea_camera_timestamp_file, ximea_sync_file)
+    ximea_timeline = timeline.convert_ximea_time_to_unix_time(ximea_camera_timestamp_file, ximea_sync_file)[:,1] #first row is framenum, second is timestamp
     
     #read in other timelines (these are already in unix time)
     rsrgb_timeline = np.load(os.path.join(data_folder,'world_timestamps.npy'))
@@ -274,7 +283,7 @@ def run_analysis(analysis_base_dir,
     else:
         #assign timeline without gaze & tracker info
         common_timeline, idx_matchlist = timeline.assign_common_timeline(timeline_list, target_fps=resample_fps)
-        ximea_framelist, rsrgb_framelist, depth_framelist = idx_matchlist
+        ximea_frame_idx, rsrgb_frame_idx, depth_frame_idx = idx_matchlist
     
         
         
@@ -284,6 +293,10 @@ def run_analysis(analysis_base_dir,
     if not skip_fourier:
         print(f'Running Fourier Analaysis for {num_chunks} chunks of size {chunk_pix} pixels....')
 
+        #make directory
+        fourier_save_path = os.path.join(ana_folder,'fourier')
+        os.makedirs(fourier_save_path, exist_ok = True) 
+        
         #some calculations for Fourier Analysis
         chunk_frames = int(chunk_secs*resample_fps)
         ximea_horizontal_ppd = ximea_dims[1]/ximea_horizontal_fov_deg
@@ -293,18 +306,43 @@ def run_analysis(analysis_base_dir,
         if(has_fixations):
             #trace_types = ['fixed_central','fixed_rand_start','foveal','periph_l',
             #'periph_r','periph_u','periph_d']
-            trace_types = ['fixed_central', 'foveal', 'fixed_rand_start']
+            #trace_types = ['fixed_central', 'foveal', 'fixed_rand_start']
+            trace_types = ['fixed_central', 'foveal',] #skip rand start for now to save time
+            pupil_positions = None ### TODO: Get these from code Ago is writing
+            print('Not Yet implemented Pupil Positions in Ximea Corrdinates. Error is headed your way!')
         else:
-            trace_types = ['fixed_central', 'fixed_rand_start']
+            #trace_types = ['fixed_central', 'fixed_rand_start']
+            trace_types = ['fixed_central'] #skip rand start for now to save time
+            pupil_positions = None
         
         #loop over trace types
         for trace_type in trace_types:
         
-            #save a single example
-            np.save(os.path.join(ana_folder, f'Example3dPowerSpec_{trace_type}.npy'), ps_3d)
-            np.save(os.path.join(ana_folder, f'Example2dPowerSpec_{trace_type}.npy'), ps_2d)
-            np.save(os.path.join(ana_folder, f'Example3dPowerSpecFreqsSpace_{trace_type}.npy'), fqs_space)
-            np.save(os.path.join(ana_folder, f'Example3dPowerSpecFreqsTime_{trace_type}.npy'), fqs_time)
+            ##################### save a single example ##########################
+            trace_start_idx, trace_lcorner_xy = tracegen.generate_trace(trace_type=trace_type,
+                                                            chunk_samples=chunk_frames,
+                                                            chunk_dim=chunk_pix, frame_dims=ximea_dims,
+                                                            timeline_len=len(common_timeline),
+                                                            pupil_positions=pupil_positions, ppd=ppd,
+                                                            degrees_eccentricity=degrees_ecc,
+                                                            validation_tstart=None)
+            chunk_frame_indices = ximea_frame_idx[trace_start_idx:trace_start_idx+chunk_frames]
+            #pull out the movie chunk corresponding to this trace
+            movie_chunk = np.zeros((chunk_frames, chunk_pix, chunk_pix, 3))
+            for i, f in enumerate(chunk_frame_indices):
+                print('*',end='')
+                frame = cv2.imread(os.path.join(png_folder,f'frame_{f}.png'))
+                chunk = frame[trace_lcorner_xy[i,1]:trace_lcorner_xy[i,1]+chunk_pix, 
+                                       trace_lcorner_xy[i,0]:trace_lcorner_xy[i,0]+chunk_pix]
+                movie_chunk[i] = chunk    
+            #get fourier transform of that trace & save output
+            ps_3d, ps_2ds, fqs_space, fqs_time = stf.st_ps(movie_chunk, ppd, resample_fps,
+                                                            cosine_window=cosine_window, rm_dc=True)
+            np.save(os.path.join(fourier_save_path, f'Example3dPowerSpec_{trace_type}.npy'), ps_3d)
+            np.save(os.path.join(fourier_save_path, f'Example2dPowerSpec_{trace_type}.npy'), ps_2ds)
+            ps_2d_all, ps_2d_vert, ps_2d_horiz, ps_2d_l_diag, ps_2d_r_diag = ps_2ds #ps2ds is list of oriented 2d power specs
+            np.save(os.path.join(fourier_save_path, f'Example3dPowerSpecFreqsSpace_{trace_type}.npy'), fqs_space)
+            np.save(os.path.join(fourier_save_path, f'Example3dPowerSpecFreqsTime_{trace_type}.npy'), fqs_time)
 
             ################## NOW LOOP OVER NUM_CHUNKS AND ACCUMULATE #####################
             print(f'Taking Mean of {num_chunks} traces of type {trace_type}...')
@@ -315,15 +353,15 @@ def run_analysis(analysis_base_dir,
             ps_2d_horiz_mean = np.zeros_like(ps_2d_horiz)
             ps_2d_l_diag_mean = np.zeros_like(ps_2d_l_diag)
             ps_2d_r_diag_mean = np.zeros_like(ps_2d_r_diag)
-            for i in range(num_chunks):
-                
+            
+            for i in range(num_chunks):    
                 trace_start_idx, trace_lcorner_xy = tracegen.generate_trace(trace_type=trace_type,
                                                                             chunk_samples=chunk_frames,
-                                                                            chunk_dim=chunk_pix, frame_dims=img_dims,
+                                                                            chunk_dim=chunk_pix, frame_dims=ximea_dims,
                                                                             timeline_len=len(common_timeline),
                                                                             pupil_positions=pupil_positions, ppd=ppd,
                                                                             degrees_eccentricity=degrees_ecc,
-                                                                            validation_tstart=VALIDATION_TSTART)
+                                                                            validation_tstart=None)
                 chunk_frame_indices = ximea_frame_idx[trace_start_idx:trace_start_idx+chunk_frames]
                 #pull out the movie chunk corresponding to this trace
                 movie_chunk = np.zeros((chunk_frames, chunk_pix, chunk_pix, 3))
@@ -345,19 +383,22 @@ def run_analysis(analysis_base_dir,
                 ps_2d_l_diag_mean += ps_2d_l_diag
                 ps_2d_r_diag_mean += ps_2d_r_diag
     
-        #take mean of all trace types for this trial
-        print(f'Finished Calculating Power Spectra for Trace Type {trace_type}. Now saving...')
-        np.save(os.path.join(ana_folder, f'Mean3dPowerSpec_{trace_type}.npy'), ps_3d_mean)
-        np.save(os.path.join(ana_folder, f'Mean2dAllPowerSpec_{trace_type}.npy'), ps_2d_all_mean)
-        np.save(os.path.join(ana_folder, f'Mean2dVertPowerSpec_{trace_type}.npy'), ps_2d_vert_mean)
-        np.save(os.path.join(ana_folder, f'Mean2dHorizPowerSpec_{trace_type}.npy'), ps_2d_horiz_mean)
-        np.save(os.path.join(ana_folder, f'Mean2dLDiagPowerSpec_{trace_type}.npy'), ps_2d_l_diag_mean)
-        np.save(os.path.join(ana_folder, f'Mean2dRDiagPowerSpec_{trace_type}.npy'), ps_2d_r_diag_mean)
-        np.save(os.path.join(ana_folder, f'Mean3dPowerSpecFreqsSpace_{trace_type}.npy'), fqs_space)
-        np.save(os.path.join(ana_folder, f'Mean3dPowerSpecFreqsTime_{trace_type}.npy'), fqs_time)    
-        stf.da_plot_power(ps_2d_mean, fqs_space, fqs_time, show_onef_line=True, logscale=True,
-                  figname=f'MeanPowerSpec_{num_chunks}_chunks_{trace_type}', 
-                  saveloc=ana_folder, grey_contour=False)
+            #take mean of all trace types for this trial
+            print(f'Finished Calculating Power Spectra for Trace Type {trace_type}. Now saving...')
+            np.save(os.path.join(fourier_save_path, f'Mean3dPowerSpec_{trace_type}.npy'), ps_3d_mean)
+            np.save(os.path.join(fourier_save_path, f'Mean2dAllPowerSpec_{trace_type}.npy'), ps_2d_all_mean)
+            np.save(os.path.join(fourier_save_path, f'Mean2dVertPowerSpec_{trace_type}.npy'), ps_2d_vert_mean)
+            np.save(os.path.join(fourier_save_path, f'Mean2dHorizPowerSpec_{trace_type}.npy'), ps_2d_horiz_mean)
+            np.save(os.path.join(fourier_save_path, f'Mean2dLDiagPowerSpec_{trace_type}.npy'), ps_2d_l_diag_mean)
+            np.save(os.path.join(fourier_save_path, f'Mean2dRDiagPowerSpec_{trace_type}.npy'), ps_2d_r_diag_mean)
+            np.save(os.path.join(fourier_save_path, f'Mean3dPowerSpecFreqsSpace_{trace_type}.npy'), fqs_space)
+            np.save(os.path.join(fourier_save_path, f'Mean3dPowerSpecFreqsTime_{trace_type}.npy'), fqs_time)    
+            stf.da_plot_power(ps_2d_all_mean, fqs_space, fqs_time,
+                      figname=f'MeanPowerSpec_{num_chunks}_chunks_{trace_type}', 
+                      saveloc=fourier_save_path, show_onef_line=True, logscale=True,
+                              nsamples = 7,legend_loc=1,
+                              cmap_p='binary_r', cmap_s='summer', cmap_t='autumn')
+
         
     else:
         print('Skipping Fourier Analysis')
@@ -379,6 +420,7 @@ def main(args):
     parser.add_argument("-b", "--skip_bag_align", help="skip bag alignment", type=bool, default=False)
     parser.add_argument("-c", "--skip_calibration", help="skip eye tracking calibration", type=bool, default=True)
     parser.add_argument("-f", "--skip_fourier", help="skip fourier analysis", type=bool, default=False)
+    parser.add_argument("-y", "--skip_gaze_dependencies", help="dont run code that needs gaze", type=bool, default=False)
     #parser.add_argument("-s", "--stop_time", help="time to stop analysis")
    
     
@@ -389,7 +431,8 @@ def main(args):
     run_analysis(args.analysis_path, 
                  args.trial_list_path, args.line_number, 
                  args.skip_convert_png, args.skip_bag_align, 
-                 args.skip_calibration, args.skip_fourier)
+                 args.skip_calibration, args.skip_fourier,
+                 args.skip_gaze_dependencies)
 
     
 if __name__ == "__main__":

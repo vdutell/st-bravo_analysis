@@ -113,18 +113,17 @@ def align_depth_rsrgb(bag_in_path, bag_out_rgb_path, output_folder, aligned_rgb_
             depth_meta_msg.key = 'Frame Timestamp'
             depth_meta_msg.value = str(t)
             bag_out_rgb.write(depth_metadata_topic, depth_meta_msg, time)         
-                        
+            
     except Exception as e:
         print('Exception!')
         exc_type, exc_obj, exc_tb = sys.exc_info()
         fname = os.path.split(exc_tb.tb_frame.f_code.co_filename)[1]
         print(exc_type, fname, exc_tb.tb_lineno)
         print(e)
-        
+
     finally:
         bag_in.close()
         bag_out_rgb.close()
-    
     print('Finished Creating Depth -> RGB Bag File')
     
     ###########
@@ -156,19 +155,18 @@ def align_depth_rsrgb(bag_in_path, bag_out_rgb_path, output_folder, aligned_rgb_
             #ts = frameset.get_timestamp()
             #print(df.get_frame_number(), ts)
             aligned_depth_frame = np.array(df.get_data())
-            #cv2.imwrite(os.path.join(aligned_rgb_depth_folder,
-            #                         f'depth_frame_{str(framenum).zfill(8)}.png'),
-            #            aligned_depth_frame)
+            cv2.imwrite(os.path.join(aligned_rgb_depth_folder,
+                                    f'depth_frame_{str(i).zfill(8)}.png'),
+                       aligned_depth_frame.astype(np.uint16))
             np.save(os.path.join(aligned_rgb_depth_folder,
                                   f'depth_frame_{str(i).zfill(8)}.npy'),
                                   aligned_depth_frame)
+        #pipe.stop()
     except Exception as e:
         print(f'Failed to get frame {i}:',e)
-    finally:
-        pipe.stop()
         
     print('Finished Writing RGB Aligned Depth Files - Leaving Bag file for Now.')
-    os.remove(os.path.join(output_folder,'depth_rgb.bag'))
+    #os.remove(os.path.join(output_folder,'depth_rgb.bag'))
     return(color_metadata_msg, depth_metadata_msg, depth_to_rgb_rotation_q_message, depth_to_rgb_translation_message)
 
 #yes it's terrible practice to do this and it should be a dictionary but i need to graduate.
@@ -294,7 +292,6 @@ def align_depth_ximea(bag_in_path, bag_out_ximea_path, output_folder, aligned_xi
         cfg = rs2.config()
         cfg.enable_device_from_file(bag_out_ximea_path, repeat_playback=False)
         #cfg.enable_device_from_file(os.path.join(output_folder,'depth_ximea.bag'), repeat_playback=False)
-        print('..')
         profile = pipe.start(cfg)
         playback = profile.get_device().as_playback().set_real_time(False)
 
@@ -308,11 +305,11 @@ def align_depth_ximea(bag_in_path, bag_out_ximea_path, output_folder, aligned_xi
         color_intrinsics = color_profile.get_intrinsics()
         depth_extrinsics = color_profile.get_extrinsics_to(color_profile)
         color_extrinsics = color_profile.get_extrinsics_to(depth_profile)
-        print('&&&&&')
-        print(depth_intrinsics)
-        print(color_intrinsics)
-        print(depth_extrinsics)
-        print(color_extrinsics)
+#         print('&&&&&')
+#         print(depth_intrinsics)
+#         print(color_intrinsics)
+#         print(depth_extrinsics)
+#         print(color_extrinsics)
         
         print(f'processing {len(depth_timestamps)} timestamps...')
         for f in range(len(depth_timestamps)):
@@ -322,16 +319,19 @@ def align_depth_ximea(bag_in_path, bag_out_ximea_path, output_folder, aligned_xi
             df = aligned_frames.get_depth_frame()
             #df = frameset.get_depth_frame() #not aligned - for debugging
             aligned_depth_frame = np.array(df.get_data())
+            cv2.imwrite(os.path.join(aligned_ximea_depth_folder,
+                                    f'depth_frame_{str(f).zfill(8)}.png'),
+                       aligned_depth_frame.astype(np.uint16))
             np.save(os.path.join(aligned_ximea_depth_folder,
-                                   f'depth_frame_{str(f).zfill(8)}.npy'),
-                                    aligned_depth_frame)
+                                  f'depth_frame_{str(f).zfill(8)}.npy'),
+                                   aligned_depth_frame)
     except Exception as e:
         print(f'Failed to get frame {i}:',e)
-    finally:
-        pipe.stop()
+#     finally:
+#         pipe.stop()
 
     print('Finished Writing Ximea Aligned Depth Files - Leaving Bag File For Now')
-    os.remove(os.path.join(output_folder,'depth_ximea.bag'))
+    #os.remove(os.path.join(output_folder,'depth_ximea.bag'))
     
     return()
 
@@ -365,10 +365,19 @@ def create_aligned_depth_files(recording_folder, output_folder,
     #need rotation matrix as quaternion
     rgb_to_ximea_rotation_q = Rotation.from_dcm(rgb_to_ximea_rotation).as_quat()
 
-
+    #remove bag files in case it already exists. If we dont do this, will see a segmentation fault!
+    try:
+        os.remove(os.path.join(output_folder,'depth_rgb.bag'))
+    except OSError:
+        pass
+    try:
+        os.remove(os.path.join(output_folder,'depth_ximea.bag'))
+    except OSError:
+        pass
+ 
     #file and folder pathss
     depth_timestamps = list(np.loadtxt(os.path.join(recording_folder,'depth','timestamps.csv')))
-    depth_timestamps = depth_timestamps[:3] #testing
+    #depth_timestamps = depth_timestamps[:10] #testing
     depth_frames = btp.depth_get_all_frames(os.path.join(recording_folder,'depth'))
     depth_frames = depth_frames[:len(depth_timestamps)]
     #print(len(depth_frames), len(depth_timestamps))
@@ -386,9 +395,8 @@ def create_aligned_depth_files(recording_folder, output_folder,
     print('Aligning Depth to Realsense RGB')
     color_metadata_msg, depth_metadata_msg, depth_to_rgb_rotation_q_message, depth_to_rgb_translation_message = align_depth_rsrgb(bag_in_path, bag_out_rgb_path, output_folder, aligned_rgb_depth_folder, 
                                            depth_timestamps, depth_frames, depth_fps, depth_dims, rgb_dims)
-    
-    print('&&&',depth_to_rgb_rotation_q_message)
-    
+    os.remove(os.path.join(output_folder,'depth_rgb.bag'))
+
     #convert rgb to depth quaternion to rotation matrix
     depth_to_rgb_rotation = Rotation.from_quat(np.array((depth_to_rgb_rotation_q_message.x,
                                                         depth_to_rgb_rotation_q_message.y,
@@ -413,7 +421,7 @@ def create_aligned_depth_files(recording_folder, output_folder,
     #read in new depth files
     #depth_timestamps = list(np.loadtxt(os.path.join(recording_folder,'depth','timestamps.csv'))) #same as above
     #depth_frames = [cv2.imread(os.path.join(aligned_rgb_depth_folder,f'depth_frame_{str(f).zfill(8)}.png')) for f in range(len(depth_timestamps))]
-    #depth_frames = [np.load(os.path.join(aligned_rgb_depth_folder,f'depth_frame_{str(f).zfill(8)}.npy')) for f in range(len(depth_timestamps))]
+#     depth_frames = [np.load(os.path.join(aligned_rgb_depth_folder,f'depth_frame_{str(f).zfill(8)}.npy')) for f in range(len(depth_timestamps))]
     #depth_frames = depth_frames[:len(depth_timestamps)]
     
     #Write Depth -> Ximea Bag File
@@ -423,8 +431,10 @@ def create_aligned_depth_files(recording_folder, output_folder,
                       depth_to_ximea_rotation_q, depth_to_ximea_translation,
                       #rgb_intrinsics, rgb_distortion, 
                       ximea_intrinsics, ximea_distortion, color_metadata_msg, depth_metadata_msg)
+    os.remove(os.path.join(output_folder,'depth_ximea.bag'))
 
-    print('All Done!')
+
+    print('Done with .bag Alignment for this trial!')
 
 
 #create_aligned_depth_files(recording_folder='/home/vasha/recordings/2021_04_19/003', output_folder='./depth_align_bag/')
